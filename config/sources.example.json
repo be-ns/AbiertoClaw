@@ -1,0 +1,34 @@
+{
+  "default": "openrouter",
+  "sources": {
+    "openrouter": {
+      "driver": "openai-compatible",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "models_endpoint": "/models",
+      "free_filter": "pricing",
+      "extra_headers": {
+        "HTTP-Referer": "https://github.com/abiertoclaw",
+        "X-Title": "AbiertoClaw"
+      }
+    },
+    "zen": {
+      "driver": "openai-compatible",
+      "base_url": "https://opencode.ai/zen/v1",
+      "api_key_env": "OPENCODE_ZEN_API_KEY",
+      "models_endpoint": "/models",
+      "free_filter": "curated"
+    },
+    "byo": {
+      "driver": "openai-compatible",
+      "base_url": "${BYO_BASE_URL}",
+      "api_key_env": "BYO_API_KEY",
+      "models_endpoint": "/models",
+      "free_filter": "manual"
+    },
+    "local": {
+      "driver": "ollama",
+      "base_url": "http://127.0.0.1:11434"
+    }
+  }
+}

@@ -31,6 +31,7 @@ venv/
 logs/
 *.log
 runtime/
+state/
 
 # OS / editor
 .DS_Store

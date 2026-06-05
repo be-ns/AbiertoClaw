@@ -1,59 +1,111 @@
 # AbiertoClaw
 
-> A capable, **free-by-default** personal AI assistant — a "claw" — that you talk
-> to over **iMessage or a CLI**, with a model layer you can swap between
-> OpenRouter, OpenCode Zen, your own API key, or a fully-local model.
+A personal AI assistant that costs nothing to run. Clone the repo, answer four
+questions, and you're chatting. The model runs on a free hosted service, your
+own API key, or locally so nothing leaves your machine.
 
-**Status: early.** This repo currently holds the build spec — **[`SPEC.md`](./SPEC.md)**.
-Code lands phase by phase (see [Build phases](./SPEC.md#18-build-phases-execute-in-order)).
-The CLI is the universal path; iMessage is an opt-in macOS add-on.
+The name: *abierto* is Spanish for open. This is an open, free-by-default take
+on the "claw" assistant pattern. It's a reusable assistant layer, not a fork of
+someone else's agent runtime.
 
-## What it is
+## Quickstart
 
-A free-by-default personal assistant with an iMessage frontend and a CLI
-frontend, calendar support, and a semi-local router that runs cheap/free for
-everyday chat and **automatically upgrades to a stronger model only when a
-request is genuinely complex** — with model access swappable between OpenRouter,
-OpenCode Zen, your own API key, or a fully-local model.
-
-- **Free by default.** Runs on local (Ollama) and/or a free hosted tier — no credit card to get a working assistant.
-- **Your choice of model source.** OpenRouter, OpenCode Zen, bring-your-own OpenAI-compatible endpoint, or local Ollama. Mix sources per tier.
-- **Self-upgrading on complexity.** A semi-local router classifies each message and escalates only the hard ones.
-- **A "best free model" picker.** A daily job smoke-tests candidate free models, picks the strongest that works, and falls back/rotates when one is rate-limited or pulled.
-- **Two frontends, one brain.** Same engine, handlers, and memory behind both iMessage and the CLI.
-- **Deterministic where it counts.** High-stakes actions (calendar writes) run as plain code — no hallucinated events.
-- **Publishable.** Clone, run a setup wizard, and have a working CLI assistant in minutes.
-
-## How it works (at a glance)
-
-- **Source layer** — a single OpenAI-compatible driver (plus a separate Ollama driver) sits behind a pluggable source registry, so swapping providers is config, not code.
-- **Complexity router** — classifies intent + difficulty locally and routes to a free everyday model or a stronger one as needed.
-- **Morning picker** — refreshes today's best free model, smoke-tested with fallbacks.
-- **Deterministic tier** — anything costly-if-wrong bypasses the model entirely.
-
-See [`SPEC.md`](./SPEC.md) for the full architecture, schemas, gotchas, and the phased build plan.
-
-## Getting started
-
-Not yet runnable — **Phase 1** (engine + CLI + source layer) is the first milestone.
-The planned flow:
+You need Python 3.9+, which macOS and most Linux distros already include.
+Nothing to install beyond that... no pip, no node, no containers.
 
 ```sh
-abiertoclaw setup    # pick a source, drop a key (or go local), smoke-test
-abiertoclaw chat     # talk to it — free, on the source you chose
+git clone https://github.com/be-ns/AbiertoClaw.git
+cd AbiertoClaw
+./setup
 ```
 
-For now, read [`SPEC.md`](./SPEC.md).
+The wizard asks what to call the assistant, your name, and where models should
+come from:
 
-## Why "AbiertoClaw"?
+| Source | What you need | Who sees your messages |
+|--------|---------------|------------------------|
+| OpenRouter | a free account and API key | OpenRouter, then whichever provider runs the model |
+| OpenCode Zen | an API key | Zen, then whichever provider runs the model |
+| Bring your own | any OpenAI-compatible endpoint (Groq, Together, a vLLM box) | wherever that endpoint lives |
+| Local (Ollama) | Ollama installed | nowhere... it all stays on your machine |
 
-*Abierto* is Spanish for *open*. AbiertoClaw is an open, free-by-default take on
-the "claw" assistant pattern — spiritually inspired by `cyberpapiii/chipotlai-max`,
-but built as a **reusable assistant layer** (not a runtime fork) and shipped as a
-public repo that uses **legitimate model sources only** (local + free/paid APIs).
-It distills hard-won lessons from a working predecessor assistant so this one
-doesn't have to re-learn them.
+Pick OpenRouter and the wizard finds today's best free model for you. It pulls
+the catalog, keeps the genuinely free entries, and smoke-tests the top picks
+until one answers. Pick local and it uses whatever you've already pulled into
+Ollama.
+
+Setup ends with a health check and one real reply from your chosen model. If
+something is broken, it says exactly what to fix.
+
+Then talk to it:
+
+```sh
+bin/abiertoclaw chat
+```
+
+## What you get
+
+| Command | What it does |
+|---------|--------------|
+| `bin/abiertoclaw chat` | interactive REPL with per-thread memory |
+| `bin/abiertoclaw say "<text>"` | one-shot question, prints the answer |
+| `bin/abiertoclaw doctor` | validates config, keys, and source reachability |
+| `bin/abiertoclaw model status` | shows which model each role points to |
+
+Add `bin/` to your PATH if you'd rather type `abiertoclaw` bare.
+
+Conversation memory survives restarts (it lives in `state/`, which is
+gitignored). Inside chat, `/reset` clears the thread and `/status` shows the
+live model map.
+
+## How it routes
+
+**Cheap by default, strong when it matters.** Every message gets a complexity
+score from local heuristics: word count, multi-part structure, planning
+keywords. Simple messages stay on the everyday free model; complex ones
+escalate to the strong role. No model is ever called just to choose a model.
+
+**A reply never silently drops.** Free models get rate-limited, deprecated, and
+pulled without notice. When a call fails or comes back empty, the engine
+rotates through the remaining roles (free, then local, then strong) and only
+reports failure, with a diagnosis, after everything has been tried.
+
+High-stakes structured work, like the calendar writes coming in Phase 3, won't
+touch a model at all. It runs as deterministic code... a model that narrates
+"I added the event" without adding it is worse than no assistant.
+
+## Make it yours
+
+Setup scaffolds three markdown files in `persona/`. Edit them. They're yours,
+and gitignored:
+
+- `SOUL.md`: voice and style
+- `AGENTS.md`: hard rules (the "never fabricate dates" guardrail lives here)
+- `USER.md`: who the assistant should know about
+
+Keys live at `~/.abiertoclaw/<source>_key` (chmod 600), outside the repo.
+Config files holding your info are gitignored too; the repo only ships
+`*.example` versions.
+
+## Where this is going
+
+This is Phase 1 of the build plan in [SPEC.md](./SPEC.md): engine, CLI, source
+layer, setup wizard. Next, in order: the morning free-model picker as a
+scheduled job, the deterministic calendar skill, and an iMessage frontend for
+Macs. The engine is frontend-agnostic on purpose. iMessage will be an adapter,
+not a rewrite.
+
+## Development
+
+```sh
+python3 -m unittest discover -s tests
+```
+
+The engine is pure and the drivers are mocked, so the suite runs in under a
+second with no network. The complexity classifier has a golden set in
+`tests/test_router.py`. If your change flips a case, that's a regression to
+explain, not a test to delete.
 
 ## License
 
-[MIT](./LICENSE).
+[MIT](./LICENSE)

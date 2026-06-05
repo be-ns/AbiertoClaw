@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""abiertoclaw — entry point for every command.
+
+setup | chat | say | doctor | model status
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+USAGE = """\
+abiertoclaw — a free-by-default personal assistant
+
+usage:
+  abiertoclaw setup           first-run wizard: pick a source, drop a key, go
+  abiertoclaw chat            interactive REPL
+  abiertoclaw say "<text>"    one-shot question
+  abiertoclaw doctor          validate config, keys, and source reachability
+  abiertoclaw model status    show the active role -> source/model map
+"""
+
+
+def _build_engine():
+    from src import config as config_mod
+    from src.engine import Engine
+    from src.sources import build_registry
+
+    sources_cfg = config_mod.load_sources()
+    models_cfg = config_mod.load_models()
+    identity = config_mod.load_identity()
+    return Engine(build_registry(sources_cfg), models_cfg, identity), identity
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(USAGE)
+        return 0
+    cmd, args = argv[0], argv[1:]
+
+    if cmd == "setup":
+        from src.setup_wizard import run
+        return run()
+
+    if cmd == "doctor":
+        from src.doctor import run
+        return run()
+
+    from src.config import ConfigError
+
+    try:
+        if cmd == "chat":
+            from src.frontends.cli import repl
+            engine, identity = _build_engine()
+            return repl(engine, identity)
+
+        if cmd == "say":
+            if not args:
+                print('usage: abiertoclaw say "<text>"')
+                return 2
+            from src.frontends.cli import say
+            engine, _ = _build_engine()
+            return say(engine, " ".join(args))
+
+        if cmd == "model":
+            if args[:1] == ["status"]:
+                from src import config as config_mod
+                models_cfg = config_mod.load_models()
+                for role, spec in models_cfg["roles"].items():
+                    print("%-7s -> %s / %s" % (role, spec["source"], spec["model"]))
+                return 0
+            print("usage: abiertoclaw model status")
+            return 2
+    except ConfigError as e:
+        print("config error: %s" % e)
+        return 1
+
+    print("unknown command: %s\n\n%s" % (cmd, USAGE))
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.exit(130)
