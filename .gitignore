@@ -1,0 +1,39 @@
+# Secrets & local config (never commit keys)
+.env
+.env.*
+*_key
+*.key
+config/sources.json
+config/models.json
+config/identity.json
+persona/SOUL.md
+persona/AGENTS.md
+persona/USER.md
+
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Logs & runtime
+logs/
+*.log
+runtime/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
