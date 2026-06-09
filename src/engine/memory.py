@@ -31,16 +31,22 @@ class ThreadMemory:
             return []
         try:
             with open(path) as f:
-                return json.load(f)
+                turns = json.load(f)
         except (json.JSONDecodeError, OSError):
             return []  # corrupt memory is dropped, not fatal
+        if not isinstance(turns, list):
+            return []  # same policy for valid JSON that isn't a turn list
+        return turns
 
     def append(self, thread_id, role, content):
         turns = self.history(thread_id)
         turns.append({"role": role, "content": content})
         turns = turns[-self.max_turns:]  # trim oldest first
-        with open(_thread_path(thread_id), "w") as f:
+        path = _thread_path(thread_id)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(turns, f, indent=2)
+        os.replace(tmp, path)  # atomic: a crash mid-write can't corrupt history
 
     def reset(self, thread_id):
         path = _thread_path(thread_id)

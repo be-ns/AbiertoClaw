@@ -36,4 +36,5 @@ def store_api_key(source_name, value):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(value.strip() + "\n")
+    os.chmod(path, 0o600)  # O_CREAT mode only applies to new files
     return path

@@ -41,12 +41,18 @@ def run():
 
     registry = build_registry(sources_cfg)
 
-    # Roles must point at defined sources, and used hosted sources need keys.
+    # Roles must point at defined sources with real model ids, and used
+    # hosted sources need keys.
     used = set()
     for role, spec in models_cfg["roles"].items():
         ok = spec["source"] in registry
         healthy = _check(ok, "role %r -> source %r" % (role, spec["source"]),
                          "" if ok else "not defined in sources.json") and healthy
+        if spec["model"].startswith("<"):
+            # Hand-copied example config: the wizard never ran for this role.
+            healthy = _check(False, "role %r model" % role,
+                             "%r is a placeholder — run `abiertoclaw setup` or "
+                             "edit config/models.json" % spec["model"]) and healthy
         if ok:
             used.add(spec["source"])
 
@@ -57,7 +63,7 @@ def run():
             reachable, detail = True, ""
         except RateLimited:
             reachable, detail = True, "reachable (rate limited)"
-        except ProviderError as e:
+        except (ProviderError, ConfigError) as e:
             reachable, detail = False, str(e)
 
         if source.needs_key:

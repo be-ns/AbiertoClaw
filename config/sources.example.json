@@ -8,7 +8,7 @@
       "models_endpoint": "/models",
       "free_filter": "pricing",
       "extra_headers": {
-        "HTTP-Referer": "https://github.com/abiertoclaw",
+        "HTTP-Referer": "https://github.com/be-ns/AbiertoClaw",
         "X-Title": "AbiertoClaw"
       }
     },

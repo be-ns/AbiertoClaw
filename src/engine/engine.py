@@ -8,6 +8,7 @@ Fallback chain (SPEC §7.3): a reply must never silently drop. On a rate
 limit, an error, or an empty reply we rotate to the next role's model.
 """
 
+from ..config import ConfigError
 from ..drivers import ProviderError, RateLimited
 from . import persona, router
 from .memory import ThreadMemory
@@ -78,7 +79,7 @@ class Engine:
             except RateLimited:
                 errors.append("%s: rate limited (%s)" % (role, spec["model"]))
                 continue
-            except ProviderError as e:
+            except (ProviderError, ConfigError) as e:
                 errors.append("%s: %s" % (role, e))
                 continue
             if not result["text"]:

@@ -2,6 +2,7 @@
 
 import unittest
 
+from src.config import ConfigError
 from src.drivers import ProviderError, RateLimited
 from src.engine import Engine, Message
 from src.engine.memory import ThreadMemory
@@ -92,6 +93,26 @@ class TestFallback(unittest.TestCase):
         engine, driver = make_engine({"everyday": "", "tiny": "ok"}, ROLES)
         reply = engine.handle(msg("hello"))
         self.assertEqual(reply.tier, "local")
+
+    def test_misconfigured_source_rotates_instead_of_crashing(self):
+        class BrokenSource:
+            @property
+            def driver(self):
+                raise ConfigError("source 'byo' has an empty base_url")
+
+        driver = FakeDriver({"tiny": "backup answer"})
+        engine = Engine(
+            registry={"test": FakeSource(driver), "byo": BrokenSource()},
+            models_cfg={"roles": {
+                "free": {"source": "byo", "model": "m"},
+                "local": {"source": "test", "model": "tiny"},
+            }},
+            identity={"assistant_name": "Claw", "owner_name": "Ben"},
+            memory=FakeMemory(),
+        )
+        reply = engine.handle(msg("hello"))
+        self.assertEqual(reply.tier, "local")
+        self.assertEqual(driver.calls, ["tiny"])
 
     def test_all_failures_returns_diagnostic_not_silence(self):
         engine, _ = make_engine(

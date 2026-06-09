@@ -106,6 +106,9 @@ second with no network. The complexity classifier has a golden set in
 `tests/test_router.py`. If your change flips a case, that's a regression to
 explain, not a test to delete.
 
+CI (`.github/workflows/ci.yml`) runs the same suite on Python 3.9 through
+3.13, so a fork gets checks on pull requests with zero setup.
+
 ## License
 
 [MIT](./LICENSE)
