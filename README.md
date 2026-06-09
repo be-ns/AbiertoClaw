@@ -107,7 +107,8 @@ second with no network. The complexity classifier has a golden set in
 explain, not a test to delete.
 
 CI (`.github/workflows/ci.yml`) runs the same suite on Python 3.9 through
-3.13, so a fork gets checks on pull requests with zero setup.
+3.13 (plus a macOS job), so a fork gets pull-request checks as soon as
+Actions is enabled on it.
 
 ## License
 

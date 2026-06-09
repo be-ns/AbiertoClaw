@@ -87,16 +87,17 @@ class Engine:
                 continue
             self.memory.append(msg.thread_id, "user", msg.text)
             self.memory.append(msg.thread_id, "assistant", result["text"])
-            return Reply(
-                text=result["text"],
-                tier=role,
-                meta={
-                    "source": spec["source"],
-                    "model": spec["model"],
-                    "usage": result.get("usage", {}),
-                    "complexity": level,
-                },
-            )
+            meta = {
+                "source": spec["source"],
+                "model": spec["model"],
+                "usage": result.get("usage", {}),
+                "complexity": level,
+            }
+            if errors:
+                # Roles we rotated past; frontends can surface degradation
+                # instead of it staying invisible until everything fails.
+                meta["skipped"] = errors
+            return Reply(text=result["text"], tier=role, meta=meta)
 
         return Reply(
             text=(

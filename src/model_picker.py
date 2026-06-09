@@ -5,6 +5,7 @@ active source that actually answers. Rule: never commit a model that didn't
 just pass a smoke test.
 """
 
+from .config import ConfigError
 from .drivers import ProviderError, RateLimited
 
 # Known-capable family substrings, best first (SPEC §7.2 ranking heuristic).
@@ -52,7 +53,7 @@ def pick_free(source, attempts=5, log=print):
     """Return the best free model id on a pricing-filtered source, or None."""
     try:
         models = source.driver.list_models()
-    except ProviderError as e:
+    except (ProviderError, ConfigError) as e:
         log("  could not list models: %s" % e)
         return None
     candidates = rank([m for m in models if is_free(m)])

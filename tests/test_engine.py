@@ -88,6 +88,8 @@ class TestFallback(unittest.TestCase):
         reply = engine.handle(msg("hello"))
         self.assertEqual(reply.tier, "local")
         self.assertEqual(driver.calls, ["everyday", "tiny"])
+        # Degradation is visible to frontends, not silent until total failure.
+        self.assertTrue(reply.meta["skipped"])
 
     def test_empty_reply_counts_as_failure(self):
         engine, driver = make_engine({"everyday": "", "tiny": "ok"}, ROLES)

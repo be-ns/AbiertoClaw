@@ -9,7 +9,27 @@ and ProviderError for everything else that went wrong upstream.
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never carry the API key across hosts.
+
+    The stdlib handler copies every header — including Authorization — onto
+    the redirected request, so a compromised provider (or an open redirect on
+    one) could bounce the call to a host it controls and capture the key.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and (urllib.parse.urlsplit(new.full_url).netloc
+                                != urllib.parse.urlsplit(req.full_url).netloc):
+            new.remove_header("Authorization")
+        return new
+
+
+_opener = urllib.request.build_opener(_SafeRedirectHandler())
 
 
 class RateLimited(Exception):
@@ -39,7 +59,7 @@ class Driver:
         if data is not None:
             req.add_header("Content-Type", "application/json")
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with _opener.open(req, timeout=timeout) as resp:
                 return json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
             body = ""

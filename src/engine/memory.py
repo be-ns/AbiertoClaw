@@ -8,6 +8,7 @@ store; the key is the thread, not the channel.
 import json
 import os
 import re
+import tempfile
 
 from .. import paths
 
@@ -32,8 +33,10 @@ class ThreadMemory:
         try:
             with open(path) as f:
                 turns = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return []  # corrupt memory is dropped, not fatal
+        except (ValueError, OSError):
+            # Corrupt memory (bad JSON or bad encoding) is dropped, not fatal.
+            # ValueError covers JSONDecodeError and UnicodeDecodeError both.
+            return []
         if not isinstance(turns, list):
             return []  # same policy for valid JSON that isn't a turn list
         return turns
@@ -43,10 +46,16 @@ class ThreadMemory:
         turns.append({"role": role, "content": content})
         turns = turns[-self.max_turns:]  # trim oldest first
         path = _thread_path(thread_id)
-        tmp = path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(turns, f, indent=2)
-        os.replace(tmp, path)  # atomic: a crash mid-write can't corrupt history
+        # A unique temp name per writer: concurrent appends to one thread
+        # (say + an open chat REPL share a thread_id) must not collide.
+        fd, tmp = tempfile.mkstemp(dir=paths.THREADS_DIR, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(turns, f, indent=2)
+            os.replace(tmp, path)  # atomic: a crash can't corrupt history
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)  # don't litter the dir when the write fails
 
     def reset(self, thread_id):
         path = _thread_path(thread_id)

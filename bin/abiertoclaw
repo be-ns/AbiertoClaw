@@ -38,17 +38,17 @@ def main(argv):
         return 0
     cmd, args = argv[0], argv[1:]
 
-    if cmd == "setup":
-        from src.setup_wizard import run
-        return run()
-
-    if cmd == "doctor":
-        from src.doctor import run
-        return run()
-
     from src.config import ConfigError
 
     try:
+        if cmd == "setup":
+            from src.setup_wizard import run
+            return run()
+
+        if cmd == "doctor":
+            from src.doctor import run
+            return run()
+
         if cmd == "chat":
             from src.frontends.cli import repl
             engine, identity = _build_engine()
