@@ -116,6 +116,22 @@ class TestFallback(unittest.TestCase):
         self.assertEqual(reply.tier, "local")
         self.assertEqual(driver.calls, ["tiny"])
 
+    def test_placeholder_model_is_never_sent_to_an_api(self):
+        driver = FakeDriver({"tiny": "backup answer"})
+        engine = Engine(
+            registry={"test": FakeSource(driver)},
+            models_cfg={"roles": {
+                "free": {"source": "test", "model": "<set-by-setup>"},
+                "local": {"source": "test", "model": "tiny"},
+            }},
+            identity={"assistant_name": "Claw", "owner_name": "Ben"},
+            memory=FakeMemory(),
+        )
+        reply = engine.handle(msg("hello"))
+        self.assertEqual(reply.tier, "local")
+        self.assertEqual(driver.calls, ["tiny"])  # placeholder never called
+        self.assertIn("setup", " ".join(reply.meta["skipped"]))
+
     def test_all_failures_returns_diagnostic_not_silence(self):
         engine, _ = make_engine(
             {

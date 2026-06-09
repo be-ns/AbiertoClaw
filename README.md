@@ -87,6 +87,23 @@ Keys live at `~/.abiertoclaw/<source>_key` (chmod 600), outside the repo.
 Config files holding your info are gitignored too; the repo only ships
 `*.example` versions.
 
+## When something breaks
+
+`bin/abiertoclaw doctor` is always the first move. Every ❌ it prints names
+the fix. The usual suspects:
+
+| Symptom | Fix |
+|---------|-----|
+| `missing config file` | run `./setup` — real config is per-machine and never committed |
+| `model ... is a placeholder` | setup never finished for that role; re-run `./setup` or put a real model id in `config/models.json` |
+| `key for '<source>'` | export the env var doctor names, or re-run setup to store one |
+| `empty base_url after expanding` | set the env var it names, or write the URL straight into `config/sources.json` |
+| `cannot reach ... 11434` | start Ollama (`ollama serve`), pull a model (`ollama pull qwen2.5:7b`) |
+| `rate limited` | free tiers throttle; chat already falls back to the next role on its own |
+
+`say` exits non-zero only when every configured model failed, so it's safe
+to use in scripts and cron jobs.
+
 ## Where this is going
 
 This is Phase 1 of the build plan in [SPEC.md](./SPEC.md): engine, CLI, source

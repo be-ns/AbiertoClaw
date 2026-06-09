@@ -70,6 +70,12 @@ class Engine:
         errors = []
         for role in chain:
             spec = self.roles[role]
+            if spec["model"].startswith("<"):
+                # Hand-copied example config; don't send the placeholder to
+                # an API, name the fix instead.
+                errors.append("%s: model %r is a placeholder — run "
+                              "`abiertoclaw setup`" % (role, spec["model"]))
+                continue
             source = self.registry.get(spec["source"])
             if source is None:
                 errors.append("%s: source %r not configured" % (role, spec["source"]))

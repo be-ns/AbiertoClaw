@@ -77,7 +77,8 @@ def run():
                 healthy = _check(False, "key for %r" % name,
                                  "set $%s or run setup" % source.api_key_env) and healthy
 
-        healthy = _check(reachable, "reach %s (%s)" % (name, source.base_url),
+        healthy = _check(reachable, "reach %s (%s)"
+                         % (name, source.base_url or source.cfg["base_url"]),
                          detail) and healthy
 
     print("\n%s" % ("all good." if healthy else "fix the ❌ items above, then re-run."))
