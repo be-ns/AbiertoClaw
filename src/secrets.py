@@ -31,9 +31,12 @@ def resolve_api_key(source_name, api_key_env):
 
 def store_api_key(source_name, value):
     """Write a key file with owner-only permissions."""
-    os.makedirs(paths.HOME_DIR, exist_ok=True)
+    os.makedirs(paths.HOME_DIR, mode=0o700, exist_ok=True)
     path = key_file(source_name)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
+        # Tighten before writing: O_CREAT's mode only applies to new files,
+        # and the key must never sit in a file with stale loose permissions.
+        os.fchmod(fd, 0o600)
         f.write(value.strip() + "\n")
     return path

@@ -8,6 +8,7 @@ Fallback chain (SPEC §7.3): a reply must never silently drop. On a rate
 limit, an error, or an empty reply we rotate to the next role's model.
 """
 
+from ..config import ConfigError
 from ..drivers import ProviderError, RateLimited
 from . import persona, router
 from .memory import ThreadMemory
@@ -69,6 +70,12 @@ class Engine:
         errors = []
         for role in chain:
             spec = self.roles[role]
+            if spec["model"].startswith("<"):
+                # Hand-copied example config; don't send the placeholder to
+                # an API, name the fix instead.
+                errors.append("%s: model %r is a placeholder — run "
+                              "`abiertoclaw setup`" % (role, spec["model"]))
+                continue
             source = self.registry.get(spec["source"])
             if source is None:
                 errors.append("%s: source %r not configured" % (role, spec["source"]))
@@ -78,7 +85,7 @@ class Engine:
             except RateLimited:
                 errors.append("%s: rate limited (%s)" % (role, spec["model"]))
                 continue
-            except ProviderError as e:
+            except (ProviderError, ConfigError) as e:
                 errors.append("%s: %s" % (role, e))
                 continue
             if not result["text"]:
@@ -86,16 +93,17 @@ class Engine:
                 continue
             self.memory.append(msg.thread_id, "user", msg.text)
             self.memory.append(msg.thread_id, "assistant", result["text"])
-            return Reply(
-                text=result["text"],
-                tier=role,
-                meta={
-                    "source": spec["source"],
-                    "model": spec["model"],
-                    "usage": result.get("usage", {}),
-                    "complexity": level,
-                },
-            )
+            meta = {
+                "source": spec["source"],
+                "model": spec["model"],
+                "usage": result.get("usage", {}),
+                "complexity": level,
+            }
+            if errors:
+                # Roles we rotated past; frontends can surface degradation
+                # instead of it staying invisible until everything fails.
+                meta["skipped"] = errors
+            return Reply(text=result["text"], tier=role, meta=meta)
 
         return Reply(
             text=(

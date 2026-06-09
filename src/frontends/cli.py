@@ -24,10 +24,10 @@ def _message(text):
 
 
 def say(engine, text):
-    """One-shot: abiertoclaw say "<text>"."""
+    """One-shot: abiertoclaw say "<text>". Exit 1 if no model answered."""
     reply = engine.handle(_message(text))
     print(reply.text)
-    return 0
+    return 1 if reply.meta.get("errors") else 0
 
 
 def repl(engine, identity):

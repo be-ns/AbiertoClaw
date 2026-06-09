@@ -55,8 +55,11 @@ def load_models():
     if not isinstance(roles, dict) or not roles:
         raise ConfigError("models.json needs a non-empty 'roles' object")
     for role, spec in roles.items():
-        if not spec.get("source") or not spec.get("model"):
-            raise ConfigError("role %r needs both 'source' and 'model'" % role)
+        for key in ("source", "model"):
+            if not spec.get(key) or not isinstance(spec[key], str):
+                raise ConfigError(
+                    "role %r needs %r as a non-empty string" % (role, key)
+                )
     return cfg
 
 
@@ -70,6 +73,8 @@ def load_identity():
 
 def save_json(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
+    os.replace(tmp, path)  # atomic, same policy as thread memory writes

@@ -26,6 +26,14 @@ class Source:
     @property
     def driver(self):
         if self._driver is None:
+            if not self.base_url:
+                # e.g. byo's "${BYO_BASE_URL}" with the env var unset; fail
+                # with the fix instead of urllib's "unknown url type".
+                raise config_mod.ConfigError(
+                    "source %r has an empty base_url after expanding %r — set "
+                    "the env var or put the URL in config/sources.json"
+                    % (self.name, self.cfg["base_url"])
+                )
             cls = DRIVERS[self.driver_name]
             self._driver = cls(
                 base_url=self.base_url,

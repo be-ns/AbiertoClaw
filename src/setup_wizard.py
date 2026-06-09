@@ -126,7 +126,13 @@ def run():
     sources_cfg["default"] = choice
 
     if choice == "byo":
-        base_url = _ask("Base URL (e.g. https://api.groq.com/openai/v1)")
+        while True:
+            base_url = _ask("Base URL (e.g. https://api.groq.com/openai/v1)")
+            if base_url:
+                break
+            print("Base URL can't be empty.")
+        if "://" not in base_url:
+            base_url = "https://" + base_url  # bare hosts are an easy typo
         sources_cfg["sources"]["byo"]["base_url"] = base_url
 
     config_mod.save_json(paths.config_path("sources.json"), sources_cfg)

@@ -56,6 +56,49 @@ class TestThreadMemory(unittest.TestCase):
         memory.append("group:+1 (555) 123/456", "user", "hi")
         self.assertEqual(len(memory.history("group:+1 (555) 123/456")), 1)
 
+    def test_corrupt_thread_file_is_dropped_not_fatal(self):
+        memory = ThreadMemory()
+        memory.append("t", "user", "hi")
+        path = os.path.join(paths.THREADS_DIR, "t.json")
+        with open(path, "w") as f:
+            f.write("{not json")
+        self.assertEqual(memory.history("t"), [])
+        memory.append("t", "user", "recovered")  # and writes still work
+        self.assertEqual(len(memory.history("t")), 1)
+
+    def test_non_list_json_is_dropped_not_fatal(self):
+        memory = ThreadMemory()
+        path = os.path.join(paths.THREADS_DIR, "t.json")
+        with open(path, "w") as f:
+            f.write('{"role": "user"}')
+        self.assertEqual(memory.history("t"), [])
+        memory.append("t", "user", "recovered")  # and writes still work
+        self.assertEqual(len(memory.history("t")), 1)
+
+    def test_binary_corruption_is_dropped_not_fatal(self):
+        memory = ThreadMemory()
+        path = os.path.join(paths.THREADS_DIR, "t.json")
+        with open(path, "wb") as f:
+            f.write(b"\xff\xfe[")  # invalid UTF-8: the torn-write case
+        self.assertEqual(memory.history("t"), [])
+
+    def test_failed_write_keeps_old_history_and_no_temp_litter(self):
+        memory = ThreadMemory()
+        memory.append("t", "user", "hi")
+        with mock.patch("src.engine.memory.json.dump",
+                        side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                memory.append("t", "user", "lost")
+        self.assertEqual(len(memory.history("t")), 1)
+        self.assertEqual(sorted(os.listdir(paths.THREADS_DIR)), ["t.json"])
+
+    def test_append_leaves_no_temp_file(self):
+        memory = ThreadMemory()
+        memory.append("t", "user", "hi")
+        self.assertEqual(
+            sorted(os.listdir(paths.THREADS_DIR)), ["t.json"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

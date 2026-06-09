@@ -2,6 +2,7 @@
 
 import unittest
 
+from src.config import ConfigError
 from src.drivers import ProviderError, RateLimited
 from src.engine import Engine, Message
 from src.engine.memory import ThreadMemory
@@ -87,11 +88,49 @@ class TestFallback(unittest.TestCase):
         reply = engine.handle(msg("hello"))
         self.assertEqual(reply.tier, "local")
         self.assertEqual(driver.calls, ["everyday", "tiny"])
+        # Degradation is visible to frontends, not silent until total failure.
+        self.assertTrue(reply.meta["skipped"])
 
     def test_empty_reply_counts_as_failure(self):
         engine, driver = make_engine({"everyday": "", "tiny": "ok"}, ROLES)
         reply = engine.handle(msg("hello"))
         self.assertEqual(reply.tier, "local")
+
+    def test_misconfigured_source_rotates_instead_of_crashing(self):
+        class BrokenSource:
+            @property
+            def driver(self):
+                raise ConfigError("source 'byo' has an empty base_url")
+
+        driver = FakeDriver({"tiny": "backup answer"})
+        engine = Engine(
+            registry={"test": FakeSource(driver), "byo": BrokenSource()},
+            models_cfg={"roles": {
+                "free": {"source": "byo", "model": "m"},
+                "local": {"source": "test", "model": "tiny"},
+            }},
+            identity={"assistant_name": "Claw", "owner_name": "Ben"},
+            memory=FakeMemory(),
+        )
+        reply = engine.handle(msg("hello"))
+        self.assertEqual(reply.tier, "local")
+        self.assertEqual(driver.calls, ["tiny"])
+
+    def test_placeholder_model_is_never_sent_to_an_api(self):
+        driver = FakeDriver({"tiny": "backup answer"})
+        engine = Engine(
+            registry={"test": FakeSource(driver)},
+            models_cfg={"roles": {
+                "free": {"source": "test", "model": "<set-by-setup>"},
+                "local": {"source": "test", "model": "tiny"},
+            }},
+            identity={"assistant_name": "Claw", "owner_name": "Ben"},
+            memory=FakeMemory(),
+        )
+        reply = engine.handle(msg("hello"))
+        self.assertEqual(reply.tier, "local")
+        self.assertEqual(driver.calls, ["tiny"])  # placeholder never called
+        self.assertIn("setup", " ".join(reply.meta["skipped"]))
 
     def test_all_failures_returns_diagnostic_not_silence(self):
         engine, _ = make_engine(
