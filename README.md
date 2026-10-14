@@ -16,6 +16,8 @@ hermes config set OPENROUTER_API_KEY sk-or-...   # optional, see below
 hermes abiertoclaw pick
 ```
 
+Plugins are per-profile: install it in each profile you want managed.
+
 That first `pick` opts you in. From then on, the first session after a pick
 goes 20h stale kicks off a background refresh; the new model applies to your
 next session.
@@ -32,6 +34,10 @@ next session.
    instead of dying.
 5. No key, or nothing passed? A local model becomes the main model.
 
+If every free model fails, `pick` prints why for each one. The usual culprit
+is OpenRouter's privacy setting: free models need "Free model publication"
+turned on at https://openrouter.ai/settings/privacy.
+
 Local models are found at Ollama (`127.0.0.1:11434`) and LM Studio
 (`127.0.0.1:1234`). Embedding models are skipped.
 
@@ -45,7 +51,8 @@ Local models are found at Ollama (`127.0.0.1:11434`) and LM Studio
 
 ## It stays out of your way
 
-- Changes go through `hermes config set`, the same path you'd use by hand.
+- Changes go through `hermes config set`, the same path you'd use by hand, and only touch the profile you ran it in.
+- Fallbacks you added yourself (a paid backstop, a work endpoint) are kept, after ours.
 - If you change `model.default` yourself, the daily refresh sees it and stops.
   Run `pick` again to opt back in.
 - Refresh output goes to `~/.hermes/plugin-data/abiertoclaw/refresh.log`.

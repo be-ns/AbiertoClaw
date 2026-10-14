@@ -1,5 +1,8 @@
+import http.server
+import io
 import json
 import os
+import threading
 import sys
 import tempfile
 import unittest
@@ -63,8 +66,66 @@ class PickerTest(unittest.TestCase):
         self.assertEqual(pick["primary"],
                          {"provider": "lmstudio", "model": "phi-4", "base_url": "http://127.0.0.1:1234/v1"})
 
+    def test_empty_ollama_falls_through_to_lm_studio(self):
+        def http(url, body=None, key=None, timeout=30):
+            if url.startswith("http://127.0.0.1:11434"):
+                return {"data": []}
+            if url.startswith("http://127.0.0.1:1234"):
+                return {"data": [{"id": "phi-4"}]}
+            raise urllib.error.URLError("refused")
+        self.assertEqual(picker.find_local(http)["provider"], "lmstudio")
+
     def test_nothing_works_returns_none(self):
         self.assertIsNone(picker.plan("k", http=FakeHttp([]), log=lambda *_: None))
+
+
+class FailureReasonTest(unittest.TestCase):
+    def test_bad_key_stops_early_and_says_so(self):
+        tried, logs = [], []
+
+        def http(url, body=None, key=None, timeout=30):
+            if url.endswith("/models") and url.startswith(picker.OPENROUTER):
+                return {"data": [model("qwen/a:free"), model("qwen/b:free")]}
+            if body:
+                tried.append(body["model"])
+                raise urllib.error.HTTPError(url, 401, "Unauthorized", {},
+                                             io.BytesIO(b'{"error":{"message":"No auth"}}'))
+            raise urllib.error.URLError("refused")
+        self.assertIsNone(picker.plan("bad", http=http, log=logs.append))
+        self.assertEqual(tried, ["qwen/a:free"])
+        self.assertTrue(any("HTTP 401: No auth" in line for line in logs))
+        self.assertTrue(any("rejected the key" in line for line in logs))
+
+    def test_all_free_failing_points_at_privacy_setting(self):
+        logs = []
+        picker.plan("k", http=FakeHttp([model("qwen/a:free")]), log=logs.append)
+        self.assertTrue(any("settings/privacy" in line for line in logs))
+
+    def test_local_lookup_ignores_http_proxy(self):
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"data":[{"id":"m"}]}')
+
+            def log_message(self, *a):
+                pass
+        srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        old = {k: os.environ.get(k) for k in ("http_proxy", "HTTP_PROXY", "no_proxy", "NO_PROXY")}
+        os.environ.update(http_proxy="http://10.255.255.1:9", HTTP_PROXY="http://10.255.255.1:9")
+        for k in ("no_proxy", "NO_PROXY"):
+            os.environ.pop(k, None)
+        try:
+            url = "http://127.0.0.1:%d/v1/models" % srv.server_port
+            self.assertEqual(picker.http_json(url, timeout=3), {"data": [{"id": "m"}]})
+        finally:
+            srv.shutdown()
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
 
 class ConfigTest(unittest.TestCase):
@@ -90,6 +151,28 @@ class ConfigTest(unittest.TestCase):
         hermes_config.apply(pick, run=self.run)
         self.assertIn(("config", "set", "model.base_url", "u"), self.calls)
         self.assertNotIn(("config", "unset", "model.base_url"), self.calls)
+
+    def test_keeps_fallbacks_the_user_added(self):
+        mine_before = [{"provider": "openrouter", "model": "old:free"}]
+        users = {"provider": "anthropic", "model": "claude"}
+        current = mine_before + [users, {"provider": "custom", "model": "l", "base_url": "u"}]
+
+        def run(*args):
+            return SimpleNamespace(returncode=0, stdout=json.dumps(current), stderr="")
+        pick = {"primary": {"provider": "openrouter", "model": "new:free"},
+                "fallbacks": [{"provider": "custom", "model": "l", "base_url": "u"}]}
+        self.assertEqual(hermes_config.users_own_fallbacks(mine_before, pick, run), [users])
+
+    def test_no_fallbacks_configured_yet(self):
+        def run(*args):
+            return SimpleNamespace(returncode=1, stdout="", stderr="Config key not set")
+        pick = {"primary": {"provider": "openrouter", "model": "m"}, "fallbacks": []}
+        self.assertEqual(hermes_config.users_own_fallbacks([], pick, run), [])
+
+    def test_child_is_pinned_to_profile_home(self):
+        self.assertEqual(hermes_config.child_env("/p/work")["HERMES_HOME"], "/p/work")
+        argv = hermes_config.hermes_argv("config", "get", "x")
+        self.assertEqual(argv[:3], [sys.executable, "-m", "hermes_cli.main"])
 
     def test_failed_write_raises(self):
         def run(*args):
