@@ -1,3 +1,0 @@
-#!/bin/sh
-# Fresh clone? This is the one command to run.
-exec "$(dirname "$0")/bin/abiertoclaw" setup "$@"

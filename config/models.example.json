@@ -1,7 +1,0 @@
-{
-  "roles": {
-    "local":  { "source": "openrouter", "model": "<set-by-setup>" },
-    "free":   { "source": "openrouter", "model": "<set-by-setup>", "constraint": "free" },
-    "strong": { "source": "openrouter", "model": "<set-by-setup>" }
-  }
-}
