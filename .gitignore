@@ -3,12 +3,6 @@
 .env.*
 *_key
 *.key
-config/sources.json
-config/models.json
-config/identity.json
-persona/SOUL.md
-persona/AGENTS.md
-persona/USER.md
 
 # Node
 node_modules/

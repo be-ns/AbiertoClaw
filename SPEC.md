@@ -1,3 +1,5 @@
+> **Superseded (v2, Oct 2026):** AbiertoClaw is now a Hermes Agent plugin. See README.md. This spec documents the original standalone design.
+
 # AbiertoClaw — Build Spec
 
 > **Status:** kickoff spec, v2. Self-contained. Drop it into a fresh repo / CLI

@@ -1,131 +1,65 @@
 # AbiertoClaw
 
-A personal AI assistant that costs nothing to run. Clone the repo, answer four
-questions, and you're chatting. The model runs on a free hosted service, your
-own API key, or locally so nothing leaves your machine.
+A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that
+keeps Hermes running on today's best **free** model, with a local model as the
+safety net.
 
-The name: *abierto* is Spanish for open. This is an open, free-by-default take
-on the "claw" assistant pattern. It's a reusable assistant layer, not a fork of
-someone else's agent runtime.
+Hermes already does the hard parts: chat, memory, persona, tools, and a
+fallback chain. AbiertoClaw does the one thing it doesn't: every day it finds a
+free model that actually works and points Hermes at it.
 
-## Quickstart
-
-You need Python 3.9+, which macOS and most Linux distros already include.
-Nothing to install beyond that... no pip, no node, no containers.
+## Install
 
 ```sh
-git clone https://github.com/be-ns/AbiertoClaw.git
-cd AbiertoClaw
-./setup
+hermes plugins install be-ns/AbiertoClaw --enable
+hermes config set OPENROUTER_API_KEY sk-or-...   # optional, see below
+hermes abiertoclaw pick
 ```
 
-The wizard asks what to call the assistant, your name, and where models should
-come from:
+That first `pick` opts you in. From then on, the first session after a pick
+goes 20h stale kicks off a background refresh; the new model applies to your
+next session.
 
-| Source | What you need | Who sees your messages |
-|--------|---------------|------------------------|
-| OpenRouter | a free account and API key | OpenRouter, then whichever provider runs the model |
-| OpenCode Zen | an API key | Zen, then whichever provider runs the model |
-| Bring your own | any OpenAI-compatible endpoint (Groq, Together, a vLLM box) | wherever that endpoint lives |
-| Local (Ollama) | Ollama installed | nowhere... it all stays on your machine |
+## How it picks
 
-Pick OpenRouter and the wizard finds today's best free model for you. It pulls
-the catalog, keeps the genuinely free entries, and smoke-tests the top picks
-until one answers. Pick local and it uses whatever you've already pulled into
-Ollama.
+1. Pull the OpenRouter catalog. Keep models that are free, support tool
+   calling, and have 64K+ context (Hermes needs all three).
+2. Rank by known-good family and context size.
+3. Smoke-test the top picks with a **real tool call**. A model that only
+   chats fails. This is the check that keeps free models from breaking Hermes.
+4. Best passer becomes `model.default`. The next two passers, then any local
+   model, become `fallback_providers`, so a rate limit mid-session rolls over
+   instead of dying.
+5. No key, or nothing passed? A local model becomes the main model.
 
-Setup ends with a health check and one real reply from your chosen model. If
-something is broken, it says exactly what to fix.
+Local models are found at Ollama (`127.0.0.1:11434`) and LM Studio
+(`127.0.0.1:1234`). Embedding models are skipped.
 
-Then talk to it:
-
-```sh
-bin/abiertoclaw chat
-```
-
-## What you get
+## Commands
 
 | Command | What it does |
 |---------|--------------|
-| `bin/abiertoclaw chat` | interactive REPL with per-thread memory |
-| `bin/abiertoclaw say "<text>"` | one-shot question, prints the answer |
-| `bin/abiertoclaw doctor` | validates config, keys, and source reachability |
-| `bin/abiertoclaw model status` | shows which model each role points to |
+| `hermes abiertoclaw pick` | pick and apply now |
+| `hermes abiertoclaw pick --dry-run` | show the pick, change nothing |
+| `hermes abiertoclaw status` | what's picked and how long ago |
 
-Add `bin/` to your PATH if you'd rather type `abiertoclaw` bare.
+## It stays out of your way
 
-Conversation memory survives restarts (it lives in `state/`, which is
-gitignored). Inside chat, `/reset` clears the thread and `/status` shows the
-live model map.
-
-## How it routes
-
-**Cheap by default, strong when it matters.** Every message gets a complexity
-score from local heuristics: word count, multi-part structure, planning
-keywords. Simple messages stay on the everyday free model; complex ones
-escalate to the strong role. No model is ever called just to choose a model.
-
-**A reply never silently drops.** Free models get rate-limited, deprecated, and
-pulled without notice. When a call fails or comes back empty, the engine
-rotates through the remaining roles (free, then local, then strong) and only
-reports failure, with a diagnosis, after everything has been tried.
-
-High-stakes structured work, like the calendar writes coming in Phase 3, won't
-touch a model at all. It runs as deterministic code... a model that narrates
-"I added the event" without adding it is worse than no assistant.
-
-## Make it yours
-
-Setup scaffolds three markdown files in `persona/`. Edit them. They're yours,
-and gitignored:
-
-- `SOUL.md`: voice and style
-- `AGENTS.md`: hard rules (the "never fabricate dates" guardrail lives here)
-- `USER.md`: who the assistant should know about
-
-Keys live at `~/.abiertoclaw/<source>_key` (chmod 600), outside the repo.
-Config files holding your info are gitignored too; the repo only ships
-`*.example` versions.
-
-## When something breaks
-
-`bin/abiertoclaw doctor` is always the first move. Every ❌ it prints names
-the fix. The usual suspects:
-
-| Symptom | Fix |
-|---------|-----|
-| `missing config file` | run `./setup` — real config is per-machine and never committed |
-| `model ... is a placeholder` | setup never finished for that role; re-run `./setup` or put a real model id in `config/models.json` |
-| `key for '<source>'` | export the env var doctor names, or re-run setup to store one |
-| `empty base_url after expanding` | set the env var it names, or write the URL straight into `config/sources.json` |
-| `cannot reach ... 11434` | start Ollama (`ollama serve`), pull a model (`ollama pull qwen2.5:7b`) |
-| `rate limited` | free tiers throttle; chat already falls back to the next role on its own |
-
-`say` exits non-zero only when every configured model failed, so it's safe
-to use in scripts and cron jobs.
-
-## Where this is going
-
-This is Phase 1 of the build plan in [SPEC.md](./SPEC.md): engine, CLI, source
-layer, setup wizard. Next, in order: the morning free-model picker as a
-scheduled job, the deterministic calendar skill, and an iMessage frontend for
-Macs. The engine is frontend-agnostic on purpose. iMessage will be an adapter,
-not a rewrite.
+- Changes go through `hermes config set`, the same path you'd use by hand.
+- If you change `model.default` yourself, the daily refresh sees it and stops.
+  Run `pick` again to opt back in.
+- Refresh output goes to `~/.hermes/plugin-data/abiertoclaw/refresh.log`.
+- Under `plugins.isolation: host`, Hermes doesn't wire plugin CLI commands;
+  use the default in-process mode.
 
 ## Development
 
 ```sh
 python3 -m unittest discover -s tests
+hermes plugins validate .
 ```
 
-The engine is pure and the drivers are mocked, so the suite runs in under a
-second with no network. The complexity classifier has a golden set in
-`tests/test_router.py`. If your change flips a case, that's a regression to
-explain, not a test to delete.
-
-CI (`.github/workflows/ci.yml`) runs the same suite on Python 3.9 through
-3.13 (plus a macOS job), so a fork gets pull-request checks as soon as
-Actions is enabled on it.
+Stdlib only; the tests mock HTTP and the `hermes` CLI and run with no network.
 
 ## License
 

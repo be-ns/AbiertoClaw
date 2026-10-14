@@ -1,0 +1,6 @@
+name: abiertoclaw
+version: 2.0.0
+description: "Keeps Hermes on today's best free OpenRouter model (tool-call smoke-tested), with a local Ollama / LM Studio model as the fallback."
+author: "be-ns"
+provides_hooks:
+  - on_session_start
