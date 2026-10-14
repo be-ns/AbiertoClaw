@@ -9,7 +9,6 @@ pick, a stale pick (20h+) refreshes in the background at session start.
 import argparse
 import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -24,6 +23,15 @@ def _data_dir():
         return plugin_data_dir(PLUGIN)
     except ImportError:
         return Path(os.path.expanduser("~/.hermes/plugin-data")) / PLUGIN
+
+
+def _home():
+    """This profile's Hermes home (<home>/plugin-data/abiertoclaw)."""
+    return _data_dir().parent.parent
+
+
+def _run(*args):
+    return hermes_config.run_hermes(*args, home=_home())
 
 
 def _state():
@@ -41,7 +49,7 @@ def _openrouter_key():
 def _cmd_pick(args):
     state = _state()
     state.save(checked_at=time.time())
-    if args.auto and state.user_took_over(hermes_config.current_model()):
+    if args.auto and state.user_took_over(hermes_config.current_model(_run)):
         print("abiertoclaw: model was changed by hand; leaving it alone. "
               "Run `hermes abiertoclaw pick` to opt back in.")
         return 0
@@ -56,12 +64,19 @@ def _cmd_pick(args):
         print("primary:   %s" % pick["primary"])
         print("fallbacks: %s" % pick["fallbacks"])
         return 0
-    hermes_config.apply(pick)
+    ours = pick["fallbacks"]
+    users = hermes_config.users_own_fallbacks(state.load().get("fallbacks", []), pick, _run)
+    try:
+        hermes_config.apply(dict(pick, fallbacks=ours + users), _run)
+    except RuntimeError as e:
+        print("❌ could not update Hermes config: %s" % e)
+        return 1
     state.save(model=pick["primary"]["model"], picked_at=time.time(),
-               primary=pick["primary"], fallbacks=pick["fallbacks"])
-    print("✅ %s/%s is now the main model (%d fallback%s)."
-          % (pick["primary"]["provider"], pick["primary"]["model"],
-             len(pick["fallbacks"]), "" if len(pick["fallbacks"]) == 1 else "s"))
+               primary=pick["primary"], fallbacks=ours)  # only ours: users' stay theirs
+    n = len(ours) + len(users)
+    print("✅ %s/%s is now the main model (%d fallback%s%s)."
+          % (pick["primary"]["provider"], pick["primary"]["model"], n, "" if n == 1 else "s",
+             ", %d of them yours" % len(users) if users else ""))
     return 0
 
 
@@ -98,13 +113,11 @@ def _on_session_start(**kwargs):
         if not state.due():
             return
         state.save(checked_at=time.time())  # claim the slot before spawning
-        exe = hermes_config.shutil.which("hermes")
-        if not exe:
-            return
-        log = open(_data_dir() / "refresh.log", "a")
-        subprocess.Popen([exe, PLUGIN, "pick", "--auto"], stdout=log, stderr=log,
-                         stdin=subprocess.DEVNULL, start_new_session=True,
-                         close_fds=sys.platform != "win32")
+        with open(_data_dir() / "refresh.log", "a") as log:
+            subprocess.Popen(hermes_config.hermes_argv(PLUGIN, "pick", "--auto"),
+                             stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                             env=hermes_config.child_env(_home()),
+                             start_new_session=True)
     except Exception:  # a hook must never break a session
         pass
 

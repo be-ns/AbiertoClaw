@@ -38,14 +38,31 @@ PING_TOOL = {
 SMOKE_MESSAGES = [{"role": "user", "content": "Call the ping tool now."}]
 
 
+# Local servers must never go through HTTP(S)_PROXY, which often ignores localhost.
+_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def http_json(url, body=None, key=None, timeout=30):
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Authorization"] = "Bearer " + key
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    local = url.startswith("http://127.0.0.1")
+    opener = _DIRECT.open if local else urllib.request.urlopen
+    with opener(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
+
+
+def _reason(err):
+    """Short, human reason for a failed call, from OpenRouter's error body when present."""
+    if isinstance(err, urllib.error.HTTPError):
+        try:
+            msg = json.loads(err.read().decode())["error"]["message"]
+        except (ValueError, KeyError, TypeError, OSError):
+            msg = err.reason
+        return "HTTP %d: %s" % (err.code, msg)
+    return str(err)[:200]
 
 
 def is_candidate(model):
@@ -77,7 +94,7 @@ def rank(models):
 
 
 def smoke_test(model_id, key, http=http_json):
-    """True only if the model answers with a tool call."""
+    """None if the model answered with a tool call, else why it failed."""
     try:
         resp = http(OPENROUTER + "/chat/completions", {
             "model": model_id,
@@ -86,9 +103,11 @@ def smoke_test(model_id, key, http=http_json):
             "max_tokens": 200,
         }, key=key)
         message = resp["choices"][0]["message"]
-        return bool(message.get("tool_calls"))
-    except (urllib.error.URLError, OSError, ValueError, KeyError, IndexError, TypeError):
-        return False
+    except urllib.error.HTTPError as e:
+        return _reason(e)
+    except (urllib.error.URLError, OSError, ValueError, KeyError, IndexError, TypeError) as e:
+        return "bad response: %s" % _reason(e)
+    return None if message.get("tool_calls") else "answered without calling the tool"
 
 
 def find_local(http=http_json):
@@ -122,13 +141,20 @@ def plan(key, http=http_json, keep=3, attempts=8, log=print):
         candidates = rank([m for m in models if is_candidate(m)])
         log("  %d free tool-capable models; smoke-testing..." % len(candidates))
         for m in candidates[:attempts]:
-            if smoke_test(m["id"], key, http):
+            failure = smoke_test(m["id"], key, http)
+            if failure is None:
                 log("  ✅ %s" % m["id"])
                 winners.append({"provider": "openrouter", "model": m["id"]})
                 if len(winners) == keep:
                     break
-            else:
-                log("  ✗ %s" % m["id"])
+                continue
+            log("  ✗ %s (%s)" % (m["id"], failure))
+            if failure.startswith("HTTP 401"):
+                log("  OpenRouter rejected the key; fix OPENROUTER_API_KEY")
+                break
+        if candidates and not winners:
+            log("  hint: free models need 'Free model publication' enabled at "
+                "https://openrouter.ai/settings/privacy")
     else:
         log("  no OPENROUTER_API_KEY; skipping free models")
 
